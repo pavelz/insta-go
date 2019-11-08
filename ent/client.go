@@ -9,6 +9,7 @@ import (
 
 	"github.com/pavelz/insta-go/ent/migrate"
 
+	"github.com/pavelz/insta-go/ent/photo"
 	"github.com/pavelz/insta-go/ent/user"
 
 	"github.com/facebookincubator/ent/dialect"
@@ -20,6 +21,8 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// Photo is the client for interacting with the Photo builders.
+	Photo *PhotoClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 }
@@ -31,6 +34,7 @@ func NewClient(opts ...Option) *Client {
 	return &Client{
 		config: c,
 		Schema: migrate.NewSchema(c.driver),
+		Photo:  NewPhotoClient(c),
 		User:   NewUserClient(c),
 	}
 }
@@ -64,6 +68,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := config{driver: tx, log: c.log, debug: c.debug}
 	return &Tx{
 		config: cfg,
+		Photo:  NewPhotoClient(cfg),
 		User:   NewUserClient(cfg),
 	}, nil
 }
@@ -71,7 +76,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		User.
+//		Photo.
 //		Query().
 //		Count(ctx)
 //
@@ -83,6 +88,7 @@ func (c *Client) Debug() *Client {
 	return &Client{
 		config: cfg,
 		Schema: migrate.NewSchema(cfg.driver),
+		Photo:  NewPhotoClient(cfg),
 		User:   NewUserClient(cfg),
 	}
 }
@@ -90,6 +96,70 @@ func (c *Client) Debug() *Client {
 // Close closes the database connection and prevents new queries from starting.
 func (c *Client) Close() error {
 	return c.driver.Close()
+}
+
+// PhotoClient is a client for the Photo schema.
+type PhotoClient struct {
+	config
+}
+
+// NewPhotoClient returns a client for the Photo from the given config.
+func NewPhotoClient(c config) *PhotoClient {
+	return &PhotoClient{config: c}
+}
+
+// Create returns a create builder for Photo.
+func (c *PhotoClient) Create() *PhotoCreate {
+	return &PhotoCreate{config: c.config}
+}
+
+// Update returns an update builder for Photo.
+func (c *PhotoClient) Update() *PhotoUpdate {
+	return &PhotoUpdate{config: c.config}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PhotoClient) UpdateOne(ph *Photo) *PhotoUpdateOne {
+	return c.UpdateOneID(ph.ID)
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PhotoClient) UpdateOneID(id int) *PhotoUpdateOne {
+	return &PhotoUpdateOne{config: c.config, id: id}
+}
+
+// Delete returns a delete builder for Photo.
+func (c *PhotoClient) Delete() *PhotoDelete {
+	return &PhotoDelete{config: c.config}
+}
+
+// DeleteOne returns a delete builder for the given entity.
+func (c *PhotoClient) DeleteOne(ph *Photo) *PhotoDeleteOne {
+	return c.DeleteOneID(ph.ID)
+}
+
+// DeleteOneID returns a delete builder for the given id.
+func (c *PhotoClient) DeleteOneID(id int) *PhotoDeleteOne {
+	return &PhotoDeleteOne{c.Delete().Where(photo.ID(id))}
+}
+
+// Create returns a query builder for Photo.
+func (c *PhotoClient) Query() *PhotoQuery {
+	return &PhotoQuery{config: c.config}
+}
+
+// Get returns a Photo entity by its id.
+func (c *PhotoClient) Get(ctx context.Context, id int) (*Photo, error) {
+	return c.Query().Where(photo.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PhotoClient) GetX(ctx context.Context, id int) *Photo {
+	ph, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return ph
 }
 
 // UserClient is a client for the User schema.
@@ -154,4 +224,23 @@ func (c *UserClient) GetX(ctx context.Context, id int) *User {
 		panic(err)
 	}
 	return u
+}
+
+// QueryPhotos queries the photos edge of a User.
+func (c *UserClient) QueryPhotos(u *User) *PhotoQuery {
+	query := &PhotoQuery{config: c.config}
+	id := u.ID
+	step := &sql.Step{}
+	step.From.V = id
+	step.From.Table = user.Table
+	step.From.Column = user.FieldID
+	step.To.Table = photo.Table
+	step.To.Column = photo.FieldID
+	step.Edge.Rel = sql.O2M
+	step.Edge.Inverse = false
+	step.Edge.Table = user.PhotosTable
+	step.Edge.Columns = append(step.Edge.Columns, user.PhotosColumn)
+	query.sql = sql.Neighbors(u.driver.Dialect(), step)
+
+	return query
 }

@@ -766,13 +766,48 @@ func ImageNotNil() predicate.User {
 	)
 }
 
+// HasPhotos applies the HasEdge predicate on the "photos" edge.
+func HasPhotos() predicate.User {
+	return predicate.User(
+		func(s *sql.Selector) {
+			t1 := s.Table()
+			builder := sql.Dialect(s.Dialect())
+			s.Where(
+				sql.In(
+					t1.C(FieldID),
+					builder.Select(PhotosColumn).
+						From(builder.Table(PhotosTable)).
+						Where(sql.NotNull(PhotosColumn)),
+				),
+			)
+		},
+	)
+}
+
+// HasPhotosWith applies the HasEdge predicate on the "photos" edge with a given conditions (other predicates).
+func HasPhotosWith(preds ...predicate.Photo) predicate.User {
+	return predicate.User(
+		func(s *sql.Selector) {
+			builder := sql.Dialect(s.Dialect())
+			t1 := s.Table()
+			t2 := builder.Select(PhotosColumn).From(builder.Table(PhotosTable))
+			for _, p := range preds {
+				p(t2)
+			}
+			s.Where(sql.In(t1.C(FieldID), t2))
+		},
+	)
+}
+
 // And groups list of predicates with the AND operator between them.
 func And(predicates ...predicate.User) predicate.User {
 	return predicate.User(
 		func(s *sql.Selector) {
+			s1 := s.Clone().SetP(nil)
 			for _, p := range predicates {
-				p(s)
+				p(s1)
 			}
+			s.Where(s1.P())
 		},
 	)
 }
@@ -781,12 +816,14 @@ func And(predicates ...predicate.User) predicate.User {
 func Or(predicates ...predicate.User) predicate.User {
 	return predicate.User(
 		func(s *sql.Selector) {
+			s1 := s.Clone().SetP(nil)
 			for i, p := range predicates {
 				if i > 0 {
-					s.Or()
+					s1.Or()
 				}
-				p(s)
+				p(s1)
 			}
+			s.Where(s1.P())
 		},
 	)
 }

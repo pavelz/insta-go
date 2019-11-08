@@ -15,6 +15,33 @@ import (
 //
 var dsn string
 
+func ExamplePhoto() {
+	if dsn == "" {
+		return
+	}
+	ctx := context.Background()
+	drv, err := sql.Open("mysql", dsn)
+	if err != nil {
+		log.Fatalf("failed creating database client: %v", err)
+	}
+	defer drv.Close()
+	client := NewClient(Driver(drv))
+	// creating vertices for the photo's edges.
+
+	// create photo vertex with its edges.
+	ph := client.Photo.
+		Create().
+		SetLat(1).
+		SetLng(1).
+		SetImage(nil).
+		SetFielname("string").
+		SaveX(ctx)
+	log.Println("photo created:", ph)
+
+	// query edges.
+
+	// Output:
+}
 func ExampleUser() {
 	if dsn == "" {
 		return
@@ -27,6 +54,14 @@ func ExampleUser() {
 	defer drv.Close()
 	client := NewClient(Driver(drv))
 	// creating vertices for the user's edges.
+	ph0 := client.Photo.
+		Create().
+		SetLat(1).
+		SetLng(1).
+		SetImage(nil).
+		SetFielname("string").
+		SaveX(ctx)
+	log.Println("photo created:", ph0)
 
 	// create user vertex with its edges.
 	u := client.User.
@@ -36,10 +71,16 @@ func ExampleUser() {
 		SetNick("string").
 		SetNick2("string").
 		SetImage(nil).
+		AddPhotos(ph0).
 		SaveX(ctx)
 	log.Println("user created:", u)
 
 	// query edges.
+	ph0, err = u.QueryPhotos().First(ctx)
+	if err != nil {
+		log.Fatalf("failed querying photos: %v", err)
+	}
+	log.Println("photos found:", ph0)
 
 	// Output:
 }

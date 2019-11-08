@@ -9,6 +9,7 @@ import (
 	"math"
 
 	"github.com/facebookincubator/ent/dialect/sql"
+	"github.com/pavelz/insta-go/ent/photo"
 	"github.com/pavelz/insta-go/ent/predicate"
 	"github.com/pavelz/insta-go/ent/user"
 )
@@ -47,6 +48,21 @@ func (uq *UserQuery) Offset(offset int) *UserQuery {
 func (uq *UserQuery) Order(o ...Order) *UserQuery {
 	uq.order = append(uq.order, o...)
 	return uq
+}
+
+// QueryPhotos chains the current query on the photos edge.
+func (uq *UserQuery) QueryPhotos() *PhotoQuery {
+	query := &PhotoQuery{config: uq.config}
+
+	builder := sql.Dialect(uq.driver.Dialect())
+	t1 := builder.Table(photo.Table)
+	t2 := uq.sqlQuery()
+	t2.Select(t2.C(user.FieldID))
+	query.sql = builder.Select().
+		From(t1).
+		Join(t2).
+		On(t1.C(user.PhotosColumn), t2.C(user.FieldID))
+	return query
 }
 
 // First returns the first User entity in the query. Returns *ErrNotFound when no user was found.

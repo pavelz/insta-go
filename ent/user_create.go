@@ -8,17 +8,19 @@ import (
 	"fmt"
 
 	"github.com/facebookincubator/ent/dialect/sql"
+	"github.com/pavelz/insta-go/ent/photo"
 	"github.com/pavelz/insta-go/ent/user"
 )
 
 // UserCreate is the builder for creating a User entity.
 type UserCreate struct {
 	config
-	age   *int
-	name  *string
-	nick  *string
-	nick2 *string
-	image *[]byte
+	age    *int
+	name   *string
+	nick   *string
+	nick2  *string
+	image  *[]byte
+	photos map[int]struct{}
 }
 
 // SetAge sets the age field.
@@ -75,6 +77,26 @@ func (uc *UserCreate) SetImage(b []byte) *UserCreate {
 	return uc
 }
 
+// AddPhotoIDs adds the photos edge to Photo by ids.
+func (uc *UserCreate) AddPhotoIDs(ids ...int) *UserCreate {
+	if uc.photos == nil {
+		uc.photos = make(map[int]struct{})
+	}
+	for i := range ids {
+		uc.photos[ids[i]] = struct{}{}
+	}
+	return uc
+}
+
+// AddPhotos adds the photos edges to Photo.
+func (uc *UserCreate) AddPhotos(p ...*Photo) *UserCreate {
+	ids := make([]int, len(p))
+	for i := range p {
+		ids[i] = p[i].ID
+	}
+	return uc.AddPhotoIDs(ids...)
+}
+
 // Save creates the User in the database.
 func (uc *UserCreate) Save(ctx context.Context) (*User, error) {
 	if uc.age == nil {
@@ -113,6 +135,7 @@ func (uc *UserCreate) SaveX(ctx context.Context) *User {
 
 func (uc *UserCreate) sqlSave(ctx context.Context) (*User, error) {
 	var (
+		res     sql.Result
 		builder = sql.Dialect(uc.driver.Dialect())
 		u       = &User{config: uc.config}
 	)
@@ -146,6 +169,26 @@ func (uc *UserCreate) sqlSave(ctx context.Context) (*User, error) {
 		return nil, rollback(tx, err)
 	}
 	u.ID = int(id)
+	if len(uc.photos) > 0 {
+		p := sql.P()
+		for eid := range uc.photos {
+			p.Or().EQ(photo.FieldID, eid)
+		}
+		query, args := builder.Update(user.PhotosTable).
+			Set(user.PhotosColumn, id).
+			Where(sql.And(p, sql.IsNull(user.PhotosColumn))).
+			Query()
+		if err := tx.Exec(ctx, query, args, &res); err != nil {
+			return nil, rollback(tx, err)
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return nil, rollback(tx, err)
+		}
+		if int(affected) < len(uc.photos) {
+			return nil, rollback(tx, &ErrConstraintFailed{msg: fmt.Sprintf("one of \"photos\" %v already connected to a different \"User\"", keys(uc.photos))})
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}

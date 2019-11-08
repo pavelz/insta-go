@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/facebookincubator/ent/dialect/sql"
+	"github.com/pavelz/insta-go/ent/photo"
 	"github.com/pavelz/insta-go/ent/predicate"
 	"github.com/pavelz/insta-go/ent/user"
 )
@@ -14,14 +15,16 @@ import (
 // UserUpdate is the builder for updating User entities.
 type UserUpdate struct {
 	config
-	age        *int
-	addage     *int
-	name       *string
-	nick       *string
-	nick2      *string
-	image      *[]byte
-	clearimage bool
-	predicates []predicate.User
+	age           *int
+	addage        *int
+	name          *string
+	nick          *string
+	nick2         *string
+	image         *[]byte
+	clearimage    bool
+	photos        map[int]struct{}
+	removedPhotos map[int]struct{}
+	predicates    []predicate.User
 }
 
 // Where adds a new predicate for the builder.
@@ -100,6 +103,46 @@ func (uu *UserUpdate) ClearImage() *UserUpdate {
 	uu.image = nil
 	uu.clearimage = true
 	return uu
+}
+
+// AddPhotoIDs adds the photos edge to Photo by ids.
+func (uu *UserUpdate) AddPhotoIDs(ids ...int) *UserUpdate {
+	if uu.photos == nil {
+		uu.photos = make(map[int]struct{})
+	}
+	for i := range ids {
+		uu.photos[ids[i]] = struct{}{}
+	}
+	return uu
+}
+
+// AddPhotos adds the photos edges to Photo.
+func (uu *UserUpdate) AddPhotos(p ...*Photo) *UserUpdate {
+	ids := make([]int, len(p))
+	for i := range p {
+		ids[i] = p[i].ID
+	}
+	return uu.AddPhotoIDs(ids...)
+}
+
+// RemovePhotoIDs removes the photos edge to Photo by ids.
+func (uu *UserUpdate) RemovePhotoIDs(ids ...int) *UserUpdate {
+	if uu.removedPhotos == nil {
+		uu.removedPhotos = make(map[int]struct{})
+	}
+	for i := range ids {
+		uu.removedPhotos[ids[i]] = struct{}{}
+	}
+	return uu
+}
+
+// RemovePhotos removes photos edges to Photo.
+func (uu *UserUpdate) RemovePhotos(p ...*Photo) *UserUpdate {
+	ids := make([]int, len(p))
+	for i := range p {
+		ids[i] = p[i].ID
+	}
+	return uu.RemovePhotoIDs(ids...)
 }
 
 // Save executes the query and returns the number of rows/vertices matched by this operation.
@@ -195,6 +238,42 @@ func (uu *UserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			return 0, rollback(tx, err)
 		}
 	}
+	if len(uu.removedPhotos) > 0 {
+		eids := make([]int, len(uu.removedPhotos))
+		for eid := range uu.removedPhotos {
+			eids = append(eids, eid)
+		}
+		query, args := builder.Update(user.PhotosTable).
+			SetNull(user.PhotosColumn).
+			Where(sql.InInts(user.PhotosColumn, ids...)).
+			Where(sql.InInts(photo.FieldID, eids...)).
+			Query()
+		if err := tx.Exec(ctx, query, args, &res); err != nil {
+			return 0, rollback(tx, err)
+		}
+	}
+	if len(uu.photos) > 0 {
+		for _, id := range ids {
+			p := sql.P()
+			for eid := range uu.photos {
+				p.Or().EQ(photo.FieldID, eid)
+			}
+			query, args := builder.Update(user.PhotosTable).
+				Set(user.PhotosColumn, id).
+				Where(sql.And(p, sql.IsNull(user.PhotosColumn))).
+				Query()
+			if err := tx.Exec(ctx, query, args, &res); err != nil {
+				return 0, rollback(tx, err)
+			}
+			affected, err := res.RowsAffected()
+			if err != nil {
+				return 0, rollback(tx, err)
+			}
+			if int(affected) < len(uu.photos) {
+				return 0, rollback(tx, &ErrConstraintFailed{msg: fmt.Sprintf("one of \"photos\" %v already connected to a different \"User\"", keys(uu.photos))})
+			}
+		}
+	}
 	if err = tx.Commit(); err != nil {
 		return 0, err
 	}
@@ -204,14 +283,16 @@ func (uu *UserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 // UserUpdateOne is the builder for updating a single User entity.
 type UserUpdateOne struct {
 	config
-	id         int
-	age        *int
-	addage     *int
-	name       *string
-	nick       *string
-	nick2      *string
-	image      *[]byte
-	clearimage bool
+	id            int
+	age           *int
+	addage        *int
+	name          *string
+	nick          *string
+	nick2         *string
+	image         *[]byte
+	clearimage    bool
+	photos        map[int]struct{}
+	removedPhotos map[int]struct{}
 }
 
 // SetAge sets the age field.
@@ -284,6 +365,46 @@ func (uuo *UserUpdateOne) ClearImage() *UserUpdateOne {
 	uuo.image = nil
 	uuo.clearimage = true
 	return uuo
+}
+
+// AddPhotoIDs adds the photos edge to Photo by ids.
+func (uuo *UserUpdateOne) AddPhotoIDs(ids ...int) *UserUpdateOne {
+	if uuo.photos == nil {
+		uuo.photos = make(map[int]struct{})
+	}
+	for i := range ids {
+		uuo.photos[ids[i]] = struct{}{}
+	}
+	return uuo
+}
+
+// AddPhotos adds the photos edges to Photo.
+func (uuo *UserUpdateOne) AddPhotos(p ...*Photo) *UserUpdateOne {
+	ids := make([]int, len(p))
+	for i := range p {
+		ids[i] = p[i].ID
+	}
+	return uuo.AddPhotoIDs(ids...)
+}
+
+// RemovePhotoIDs removes the photos edge to Photo by ids.
+func (uuo *UserUpdateOne) RemovePhotoIDs(ids ...int) *UserUpdateOne {
+	if uuo.removedPhotos == nil {
+		uuo.removedPhotos = make(map[int]struct{})
+	}
+	for i := range ids {
+		uuo.removedPhotos[ids[i]] = struct{}{}
+	}
+	return uuo
+}
+
+// RemovePhotos removes photos edges to Photo.
+func (uuo *UserUpdateOne) RemovePhotos(p ...*Photo) *UserUpdateOne {
+	ids := make([]int, len(p))
+	for i := range p {
+		ids[i] = p[i].ID
+	}
+	return uuo.RemovePhotoIDs(ids...)
 }
 
 // Save executes the query and returns the updated entity.
@@ -388,6 +509,42 @@ func (uuo *UserUpdateOne) sqlSave(ctx context.Context) (u *User, err error) {
 		query, args := updater.Query()
 		if err := tx.Exec(ctx, query, args, &res); err != nil {
 			return nil, rollback(tx, err)
+		}
+	}
+	if len(uuo.removedPhotos) > 0 {
+		eids := make([]int, len(uuo.removedPhotos))
+		for eid := range uuo.removedPhotos {
+			eids = append(eids, eid)
+		}
+		query, args := builder.Update(user.PhotosTable).
+			SetNull(user.PhotosColumn).
+			Where(sql.InInts(user.PhotosColumn, ids...)).
+			Where(sql.InInts(photo.FieldID, eids...)).
+			Query()
+		if err := tx.Exec(ctx, query, args, &res); err != nil {
+			return nil, rollback(tx, err)
+		}
+	}
+	if len(uuo.photos) > 0 {
+		for _, id := range ids {
+			p := sql.P()
+			for eid := range uuo.photos {
+				p.Or().EQ(photo.FieldID, eid)
+			}
+			query, args := builder.Update(user.PhotosTable).
+				Set(user.PhotosColumn, id).
+				Where(sql.And(p, sql.IsNull(user.PhotosColumn))).
+				Query()
+			if err := tx.Exec(ctx, query, args, &res); err != nil {
+				return nil, rollback(tx, err)
+			}
+			affected, err := res.RowsAffected()
+			if err != nil {
+				return nil, rollback(tx, err)
+			}
+			if int(affected) < len(uuo.photos) {
+				return nil, rollback(tx, &ErrConstraintFailed{msg: fmt.Sprintf("one of \"photos\" %v already connected to a different \"User\"", keys(uuo.photos))})
+			}
 		}
 	}
 	if err = tx.Commit(); err != nil {

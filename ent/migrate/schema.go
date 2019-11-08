@@ -3,6 +3,7 @@
 package migrate
 
 import (
+	"github.com/pavelz/insta-go/ent/photo"
 	"github.com/pavelz/insta-go/ent/user"
 
 	"github.com/facebookincubator/ent/dialect/sql/schema"
@@ -10,6 +11,30 @@ import (
 )
 
 var (
+	// PhotosColumns holds the columns for the "photos" table.
+	PhotosColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "lat", Type: field.TypeFloat64, Default: photo.DefaultLat},
+		{Name: "lng", Type: field.TypeFloat64, Default: photo.DefaultLng},
+		{Name: "image", Type: field.TypeBytes, Nullable: true},
+		{Name: "fielname", Type: field.TypeString},
+		{Name: "user_photo_id", Type: field.TypeInt, Nullable: true},
+	}
+	// PhotosTable holds the schema information for the "photos" table.
+	PhotosTable = &schema.Table{
+		Name:       "photos",
+		Columns:    PhotosColumns,
+		PrimaryKey: []*schema.Column{PhotosColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:  "photos_users_photos",
+				Columns: []*schema.Column{PhotosColumns[5]},
+
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -28,9 +53,11 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		PhotosTable,
 		UsersTable,
 	}
 )
 
 func init() {
+	PhotosTable.ForeignKeys[0].RefTable = UsersTable
 }

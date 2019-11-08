@@ -24,6 +24,13 @@ const (
 
 	// Table holds the table name of the user in the database.
 	Table = "users"
+	// PhotosTable is the table the holds the photos relation/edge.
+	PhotosTable = "photos"
+	// PhotosInverseTable is the table name for the Photo entity.
+	// It exists in this package in order to avoid circular dependency with the "photo" package.
+	PhotosInverseTable = "photos"
+	// PhotosColumn is the table column denoting the photos relation/edge.
+	PhotosColumn = "user_photo_id"
 )
 
 // Columns holds all SQL columns are user fields.

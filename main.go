@@ -1,16 +1,16 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	entsql "github.com/facebookincubator/ent/dialect/sql"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
-	"context"
 	"github.com/pavelz/insta-go/ent"
 	"github.com/pavelz/insta-go/ent/user"
+	"github.com/pavelz/insta-go/src/location"
 	"log"
 	"os"
-	"github.com/pavelz/insta-go/src/location"
 )
 import "fmt"
 import "net/http"
@@ -85,7 +85,7 @@ func handler(w http.ResponseWriter, r *http.Request){
 				os.Exit(-1)
 			}
 
-			if c > 0 {
+				if c > 0 {
 				d, err := res.First(context.Background())
 				if err != nil {
 					fmt.Printf("error!: %s\n", err)
